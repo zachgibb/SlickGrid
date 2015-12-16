@@ -52,7 +52,7 @@ if (typeof Slick === "undefined") {
    * @param {Array}             columns     An array of column definitions.
    * @param {Object}            options     Grid options.
    **/
-  function SlickGrid(container, data, columns, options) {
+  function SlickGrid(container, data, columnDefs, options) {
     // settings
     var defaults = {
       explicitInitialization: false,
@@ -122,7 +122,7 @@ if (typeof Slick === "undefined") {
     var $focusSink, $focusSink2;
     var $headerScroller;
     var $headers;
-    var $headerRow, $headerRowScroller, $headerRowSpacer;
+    var $headerRow, $headerRowScroller, $headerRowSpacer, $spanHeaders;
     var $topPanelScroller;
     var $topPanel;
     var $viewport;
@@ -161,10 +161,13 @@ if (typeof Slick === "undefined") {
     var plugins = [];
     var cellCssClasses = {};
 
+    var columns = [];
     var columnsById = {};
     var sortColumns = [];
     var columnPosLeft = [];
     var columnPosRight = [];
+    var spanColumns = [];
+    var headerGrouping = false;
 
 
     // async call handles
@@ -196,6 +199,34 @@ if (typeof Slick === "undefined") {
 
     //////////////////////////////////////////////////////////////////////////////////////////////
     // Initialization
+    function initializeColumns() {
+      //var lastIndex = 0;
+      for (var i = 0; i < columnDefs.length; i++) {
+        //lastIndex = (lastIndex == 0) ? i : (lastIndex + 1);
+        spanColumns[i] = {
+          name: '',
+          startIndex: columns.length,
+          endIndex: i,
+          addColumWidthDiff: false
+        };
+        if (typeof columnDefs[i].columns == 'object') {
+          for (var j = 0; j < columnDefs[i].columns.length; j++) {
+            //lastIndex = i + j;
+            columns[columns.length] = columnDefs[i].columns[j];
+            spanColumns[i].name = columnDefs[i].name;
+            //spanColumns[i].endIndex = lastIndex;
+            spanColumns[i].addColumWidthDiff = true;
+            spanColumns[i].headerCssClass = 'headerAlignWithBorder';
+            headerGrouping = true;
+          }
+          spanColumns[i].endIndex = spanColumns[i].startIndex + (columnDefs[i].columns.length - 1);
+        }
+        else {
+          spanColumns[i].name = '';
+          columns[columns.length] = columnDefs[i];
+        }
+      }
+    }
 
     function init() {
       $container = $(container);
@@ -212,6 +243,7 @@ if (typeof Slick === "undefined") {
       options = $.extend({}, defaults, options);
       validateAndEnforceOptions();
       columnDefaults.width = options.defaultColumnWidth;
+      initializeColumns();
 
       columnsById = {};
       for (var i = 0; i < columns.length; i++) {
@@ -250,6 +282,7 @@ if (typeof Slick === "undefined") {
       $focusSink = $("<div tabIndex='0' hideFocus style='position:fixed;width:0;height:0;top:0;left:0;outline:0;'></div>").appendTo($container);
 
       $headerScroller = $("<div class='slick-header ui-state-default' style='overflow:hidden;position:relative;' />").appendTo($container);
+      $spanHeaders = $("<div class='slick-header-columns' style='left:-1000px' />").appendTo($headerScroller);
       $headers = $("<div class='slick-header-columns' style='left:-1000px' />").appendTo($headerScroller);
       $headers.width(getHeadersWidth());
 
@@ -645,6 +678,40 @@ if (typeof Slick === "undefined") {
       if (options.enableColumnReorder) {
         setupColumnReorder();
       }
+      createSpanHeaderRow();
+    }
+
+    //Method used to create Spanned header row
+    function createSpanHeaderRow() {
+      if (!headerGrouping) {
+        $spanHeaders.remove();
+        return;
+      }
+      $spanHeaders.empty();
+      //$headers.width(getHeadersWidth());
+      for (var i = 0; i < spanColumns.length; i++) {
+        m = spanColumns[i];
+
+        var index = m.startIndex;
+        var width = 0;
+        do {
+            width += $($($headers).children().get(index)).width();
+            index++;
+        } while (index <= m.endIndex);
+
+        if (m.addColumWidthDiff)
+            width += headerColumnWidthDiff;
+
+        var header = $("<div class='ui-state-default slick-header-column' id='" + uid + m.id + "' />")
+         .html("<span class='slick-column-name'>" + m.name + "</span>")
+         .width(width)
+         .attr("title", m.toolTip || "")
+         .data("column", m)
+         .addClass(m.headerCssClass || "")
+         .appendTo($spanHeaders);
+      }
+
+      $($spanHeaders).width($($headers).width());
     }
 
     function setupColumnSort() {
@@ -917,6 +984,7 @@ if (typeof Slick === "undefined") {
               updateCanvasWidth(true);
               render();
               trigger(self.onColumnsResized, {grid: self});
+              createSpanHeaderRow();
             });
       });
     }
@@ -940,7 +1008,7 @@ if (typeof Slick === "undefined") {
 	  // so for equivalent functionality, prior to 1.8 use .width, and after use .outerWidth
 	  var verArray = $.fn.jquery.split('.');
 	  jQueryNewWidthBehaviour = (verArray[0]==1 && verArray[1]>=8) ||  verArray[0] >=2;
-	  
+
       el = $("<div class='ui-state-default slick-header-column' style='visibility:hidden'>-</div>").appendTo($headers);
       headerColumnWidthDiff = headerColumnHeightDiff = 0;
       if (el.css("box-sizing") != "border-box" && el.css("-moz-box-sizing") != "border-box" && el.css("-webkit-box-sizing") != "border-box") {
@@ -2325,7 +2393,7 @@ if (typeof Slick === "undefined") {
 
           if (options.enableAsyncPostRenderCleanup) { startPostProcessingCleanup(); }
         }
-        rowNodeFromLastMouseWheelEvent = rowNode;      
+        rowNodeFromLastMouseWheelEvent = rowNode;
       }
     }
 
@@ -2381,7 +2449,7 @@ if (typeof Slick === "undefined") {
             cancelEditAndSetFocus();
           } else if (e.which == keyCode.PAGEDOWN) {
             navigatePageDown();
-            handled = true;           
+            handled = true;
           } else if (e.which == keyCode.PAGEUP) {
             navigatePageUp();
             handled = true;
@@ -2771,12 +2839,12 @@ if (typeof Slick === "undefined") {
       $(activeCellNode).addClass("editable");
 
 	  var useEditor = editor || getEditor(activeRow, activeCell);
-	  
+
       // don't clear the cell if a custom editor is passed through
       if (!editor && !useEditor.suppressClearOnEdit) {
         activeCellNode.innerHTML = "";
       }
- 
+
       currentEditor = new useEditor({
         grid: self,
         gridPosition: absBox($container[0]),
@@ -2832,7 +2900,7 @@ if (typeof Slick === "undefined") {
       var offsetParent = elem.offsetParent;
       while ((elem = elem.parentNode) != document.body) {
 		if (elem == null) break;
-		
+
         if (box.visible && elem.scrollHeight != elem.offsetHeight && $(elem).css("overflowY") != "visible") {
           box.visible = box.bottom > elem.scrollTop && box.top < elem.scrollTop + elem.clientHeight;
         }
@@ -2944,7 +3012,7 @@ if (typeof Slick === "undefined") {
         var prevActivePosX = activePosX;
         while (cell <= activePosX) {
           if (canCellBeActive(row, cell)) {
-            prevCell = cell;  
+            prevCell = cell;
           }
           cell += getColspan(row, cell);
         }
